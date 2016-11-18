@@ -17,8 +17,7 @@
  *****************************************************************************/
 
 new mutation_mode = 0
-new simulation_mode = 0		/* 	0 == OFF
-								1 == ON */
+
 new current_led_mode = 0	/*  0x00 == OFF
 								0x10 == RED
 								0x20 == GREEN
@@ -67,20 +66,9 @@ input_switch_left_debounce() <menu>
 
 input_switch_right_debounce() <menu>
 {
-/*	Start and Stop the CAN network traffic generator */
-	if (simulation_mode == 0)
-	{
-		simulation_mode = 1
-		printf("Simulation Started\n")
-	}
-	else
-	{
-		simulation_mode = 0
-		printf("Simulation Stopped\n");
-	}
 }
 
-front_led_handler(rx_msg[QCM_CAN_MSG])
+led_handler(rx_msg[QCM_CAN_MSG])
 {
 	new new_color = 0;
 
@@ -103,75 +91,29 @@ front_led_handler(rx_msg[QCM_CAN_MSG])
 
    	qcm_led_set(LED_FRONT_BOTTOM, new_color)
    	qcm_led_set(LED_FRONT_TOP, new_color)
-}
-
-rear_led_handler(rx_msg[QCM_CAN_MSG])
-{
-
-	new new_color = 0;
-
-	if (rx_msg.data[0] == 0x00)
-	{
-		new_color = 0x0;
-	}
-	else if(rx_msg.data[0] == 0x10)
-	{
-		new_color = 0b1111100000000000
-	}
-	else if(rx_msg.data[0] == 0x20)
-	{
-		new_color = 0b0000011111100000
-	}
-	else if(rx_msg.data[0] == 0x30)
-	{
-		new_color = 0b0000000000011111
-	}
-
   	qcm_led_set(LED_REAR_BOTTOM, new_color)
   	qcm_led_set(LED_REAR_TOP, new_color)
 }
 
 start_demo()
 {
-	qcm_timer_start(TIMER_1,5000,true)	/* 0x100 CAN Frame Timer */
 }
 
 
 @timer1() <menu>
 {
-	current_led_mode = current_led_mode + 0x10
-	if (current_led_mode > 0x30)
-		current_led_mode = 0x00
-
-	new tx_msg[QCM_CAN_MSG]
-
-	tx_msg.id = 0x100
-	tx_msg.dlc = 0x8
-	tx_msg.data[0] = current_led_mode
-	tx_msg.data[1] = 0xAA
-	tx_msg.data[2] = 0xAA
-	tx_msg.data[3] = 0xAA
-	tx_msg.data[4] = 0xAA
-	tx_msg.data[5] = 0xAA
-	tx_msg.data[6] = 0xAA
-	tx_msg.data[7] = 0xAA
-
-	/*printf("Transmitting CAN 0 Message\n")*/
-	/*qcm_can_tx(CAN0, tx_msg);*/
-	front_led_handler(tx_msg)
-	mutation_engine(tx_msg)
 }
 
 @timer0() <menu>
 {
-	rear_led_handler(saved_msg)
+	led_handler(saved_msg)
 }
 
 mutation_engine(rx_msg[QCM_CAN_MSG])
 {
 	if (mutation_mode == 0)			/* None */
 	{
-		rear_led_handler(rx_msg)
+		led_handler(rx_msg)
 	}
 	else if (mutation_mode == 1)	/* Drop */
 	{
@@ -186,7 +128,7 @@ mutation_engine(rx_msg[QCM_CAN_MSG])
 		new new_led = random(4) & 0x3
 		printf("led = %d\n", new_led)
 		rx_msg.data[0] = new_led * 0x10
-		rear_led_handler(rx_msg)
+		led_handler(rx_msg)
 	}
 }
 
@@ -260,12 +202,7 @@ input_switch_left_debounce() <>
 {
 	new i;
 	printf("CAN0 Msg Received: %x, %d, %d : ", rx_msg.id, rx_msg.is_extended, rx_msg.dlc)
-}
-
-
-@can1_rx0(rx_msg[QCM_CAN_MSG])	/* Handler for all CAN 1 messages */
-{
-	printf("CAN1 Msg Received: %x, %d, %d : ", rx_msg.id, rx_msg.is_extended, rx_msg.dlc)
+   	mutation_engine(rx_msg)
 }
 
 /******************************************************************************
@@ -287,9 +224,7 @@ main()
 
 	/* Initialize CAN Interfaces */
 	qcm_can_init(CAN0, 500000);
-	qcm_can_init(CAN1, 500000);
 	qcm_can_configure_rx_handler(CAN0, CAN_RX_HANDLER_0, 0x100, false);
-	qcm_can_configure_rx_handler(CAN1, CAN_RX_HANDLER_1, 0x100, false);
 
 	show_menu()
 	start_demo()
